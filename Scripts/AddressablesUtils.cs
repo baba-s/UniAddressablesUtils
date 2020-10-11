@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.IO;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.Networking;
@@ -101,6 +102,39 @@ namespace Kogane
 
 				onComplete( text );
 			}
+		}
+
+		/// <summary>
+		/// Addressable の初期化処理が失敗した場合に初期化前の状態に戻す為の関数
+		/// </summary>
+		public static void ResetInitializationFlag()
+		{
+			ResetInitializationFlag( true );
+		}
+
+		/// <summary>
+		/// Addressable の初期化処理が失敗した場合に初期化前の状態に戻す為の関数
+		/// </summary>
+		public static void ResetInitializationFlag( bool version_1_9_2_OrNewer )
+		{
+			// Addressables.InitializeAsync に失敗した場合も、内部では初期化済みフラグが立ってしまうため、
+			// リフレクションを使用して内部の初期化フラグを落とします
+			var addressablesType     = typeof( Addressables );
+			var assembly             = addressablesType.Assembly;
+			var addressablesImplType = assembly.GetType( "UnityEngine.AddressableAssets.AddressablesImpl" );
+
+			var addressablesImpl = version_1_9_2_OrNewer
+				? addressablesType.GetProperty( "m_Addressables", BindingFlags.Static | BindingFlags.NonPublic ).GetValue( null )
+				: addressablesType.GetField( "m_Addressables", BindingFlags.Static | BindingFlags.NonPublic ).GetValue( null );
+
+			var hasStartedInitializationField = addressablesImplType.GetField( "hasStartedInitialization", BindingFlags.Instance | BindingFlags.NonPublic );
+
+			hasStartedInitializationField.SetValue( addressablesImpl, false );
+
+			// Addressables.InitializeAsync に失敗した場合も、
+			// ローカルカタログから情報が読み込まれてしまうため、
+			// 読み込まれているローカルカタログの情報を破棄します
+			Addressables.ClearResourceLocators();
 		}
 	}
 }
